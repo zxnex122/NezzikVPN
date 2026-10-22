@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NezzVPN</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #0f1115);
+    --text: var(--tg-theme-text-color, #f2f4f8);
+    --hint: var(--tg-theme-hint-color, #8b93a3);
+    --card: var(--tg-theme-secondary-bg-color, #181b22);
+    --accent: var(--tg-theme-button-color, #2ea6ff);
+    --accent-text: var(--tg-theme-button-text-color, #ffffff);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0;
+    padding: 20px 16px 120px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  header { margin-bottom: 18px; }
+  h1 { margin: 0 0 6px; font-size: 28px; letter-spacing: -0.5px; }
+  h1 span { color: var(--accent); }
+  .sub { margin: 0; color: var(--hint); font-size: 15px; line-height: 1.4; }
+  h2 { margin: 24px 0 12px; font-size: 17px; }
+
+  .trial {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    width: 100%; padding: 14px 16px; margin: 16px 0 0;
+    background: var(--accent); color: var(--accent-text);
+    border: 0; border-radius: 16px; font: inherit; text-align: left; cursor: pointer;
+  }
+  .trial b { display: block; font-size: 16px; }
+  .trial small { opacity: .85; font-size: 13px; }
+  .trial .go { font-size: 22px; }
+
+  .plan {
+    position: relative; display: flex; align-items: center; justify-content: space-between;
+    width: 100%; margin-bottom: 10px; padding: 16px;
+    background: var(--card); color: var(--text);
+    border: 2px solid transparent; border-radius: 16px;
+    font: inherit; text-align: left; cursor: pointer;
+    transition: border-color .15s, transform .1s;
+  }
+  .plan:active { transform: scale(.985); }
+  .plan.selected { border-color: var(--accent); }
+  .plan .name { font-size: 17px; font-weight: 600; }
+  .plan .per { margin-top: 3px; font-size: 13px; color: var(--hint); }
+  .plan .price { font-size: 20px; font-weight: 700; white-space: nowrap; }
+  .badge {
+    position: absolute; top: -9px; right: 14px; padding: 2px 9px;
+    background: var(--accent); color: var(--accent-text);
+    border-radius: 999px; font-size: 12px; font-weight: 700;
+  }
+
+  .promo { display: flex; gap: 8px; }
+  .promo input {
+    flex: 1; min-width: 0; padding: 14px 16px;
+    background: var(--card); color: var(--text);
+    border: 2px solid transparent; border-radius: 14px;
+    font: inherit; text-transform: uppercase;
+  }
+  .promo input:focus { outline: 0; border-color: var(--accent); }
+  .promo-hint { margin: 8px 2px 0; color: var(--hint); font-size: 13px; }
+
+  .links { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 24px; }
+  .link {
+    padding: 14px; background: var(--card); color: var(--text);
+    border: 0; border-radius: 14px; font: inherit; font-size: 15px; cursor: pointer;
+  }
+  .link:active { transform: scale(.98); }
+
+  .how { margin-top: 24px; color: var(--hint); font-size: 14px; line-height: 1.5; }
+  .how b { color: var(--text); }
+  .how ol { margin: 8px 0 0; padding-left: 20px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Nezz<span>VPN</span></h1>
+  <p class="sub">Быстрый и стабильный VPN. Выберите тариф и оплатите картой или звёздами.</p>
+</header>
+
+<!-- Пробный период: бот сам проверит, доступен ли он этому человеку -->
+<button class="trial" id="trial">
+  <span><b>🎁 Попробовать бесплатно</b><small>Пробный доступ без оплаты</small></span>
+  <span class="go">›</span>
+</button>
+
+<h2>Тарифы</h2>
+<div id="plans"></div>
+
+<h2>Промокод</h2>
+<div class="promo">
+  <input id="promo" type="text" placeholder="Введите промокод" autocomplete="off" autocapitalize="characters" maxlength="32">
+</div>
+<p class="promo-hint">Необязательно. Скидка применится в боте при оплате.</p>
+
+<div class="links">
+  <button class="link" id="mysub">👤 Моя подписка</button>
+  <button class="link" id="support">💬 Поддержка</button>
+</div>
+
+<div class="how">
+  <b>Как это работает</b>
+  <ol>
+    <li>Выберите тариф и нажмите «Оплатить».</li>
+    <li>Выберите способ оплаты в чате с ботом.</li>
+    <li>Ссылка-подписка придёт в чат сразу после оплаты.</li>
+  </ol>
+</div>
+
+<script>
+  const tg = window.Telegram.WebApp;
+  tg.ready();
+  tg.expand();
+
+  // ВАЖНО: key должен совпадать с ключами TARIFFS в config.py (1m, 3m, 12m).
+  // Цены здесь только для показа. Настоящую сумму и скидку считает бот.
+  const BASE_MONTHS = 1;
+  const PLANS = [
+    { key: "1m",  name: "1 месяц",    months: 1,  price: 199  },
+    { key: "3m",  name: "3 месяца",   months: 3,  price: 499  },
+    { key: "12m", name: "12 месяцев", months: 12, price: 1499 },
+  ];
+
+  const basePerMonth = PLANS.find(p => p.months === BASE_MONTHS).price;
+  const box = document.getElementById("plans");
+  let selected = null;
+
+  PLANS.forEach(plan => {
+    const perMonth = Math.round(plan.price / plan.months);
+    const save = Math.round((1 - plan.price / (plan.months * basePerMonth)) * 100);
+    const el = document.createElement("button");
+    el.className = "plan";
+    el.innerHTML = `
+      ${save > 0 ? `<span class="badge">−${save}%</span>` : ""}
+      <div>
+        <div class="name">${plan.name}</div>
+        <div class="per">${perMonth} ₽ в месяц</div>
+      </div>
+      <div class="price">${plan.price} ₽</div>`;
+    el.onclick = () => select(plan, el);
+    box.appendChild(el);
+  });
+
+  function select(plan, el) {
+    selected = plan;
+    document.querySelectorAll(".plan").forEach(x => x.classList.remove("selected"));
+    el.classList.add("selected");
+    if (tg.HapticFeedback) tg.HapticFeedback.selectionChanged();
+    tg.MainButton.setText(`Оплатить ${plan.price} ₽`);
+    tg.MainButton.show();
+  }
+
+  // Все действия уходят боту одним сообщением, после чего приложение закрывается
+  function send(payload) {
+    const promo = document.getElementById("promo").value.trim();
+    if (promo && payload.action === "buy") payload.promo = promo;  // промокод нужен только при покупке
+    tg.sendData(JSON.stringify(payload));
+  }
+
+  tg.MainButton.onClick(() => { if (selected) send({ action: "buy", tariff: selected.key }); });
+  document.getElementById("trial").onclick = () => send({ action: "trial" });
+  document.getElementById("mysub").onclick = () => send({ action: "my_sub" });
+  document.getElementById("support").onclick = () => send({ action: "support" });
+</script>
+</body>
+</html>
